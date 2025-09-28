@@ -1,12 +1,12 @@
-use std::fmt::{self, write};
+use std::fmt;
 
 #[derive(Debug)]
 pub enum AppError {
     IOError(std::io::Error),
-    SerializeError,
-    DeserializeError,
+    SerializeError(serde_json::Error),
+    DeserializeError(serde_json::Error),
     VaultNotFound,
-    PermissionDenied,
+    PermissionDenied(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -16,19 +16,20 @@ impl From<std::io::Error> for AppError {
 }
 
 impl From<serde_json::Error> for AppError {
-    fn from(_err: serde_json::Error) -> Self {
-        AppError::DeserializeError
+    fn from(err: serde_json::Error) -> Self {
+        // Default to deserialize error, but we could branch on context if needed
+        AppError::DeserializeError(err)
     }
 }
 
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::IOError(e) => write!(f, "I/O error: {}", e),
-            AppError::SerializeError     => write!(f, "serialization error"),
-            AppError::DeserializeError   => write!(f, "deserialization error"),
-            AppError::VaultNotFound      => write!(f, "vault not found"),
-            AppError::PermissionDenied   => write!(f, ""),
+            AppError::IOError(e)        => write!(f, "I/O error: {}", e),
+            AppError::SerializeError(e) => write!(f, "serialization error: {}", e),
+            AppError::DeserializeError(e) => write!(f, "deserialization error: {}", e),
+            AppError::VaultNotFound     => write!(f, "vault not found"),
+            AppError::PermissionDenied(msg) => write!(f, "permission denied: {}", msg),
         }
     }
 }

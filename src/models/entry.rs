@@ -1,13 +1,19 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+//
+// Entry represents a single credential in the vault
+//
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Entry {
     pub name: String,
-    pub pass: String,
+    pub password: String,
 }
 
 impl Entry {
-    pub fn new(name: String, pass: String) -> Entry {
-        Entry { name, pass }
+    //
+    // Create a new entry (just plaintext inside memory)
+    //
+    pub fn new(name: String, password: String) -> Entry {
+        Entry { name, password }
     }
 }

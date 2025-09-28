@@ -1,6 +1,5 @@
 use std::{fs, path::PathBuf, io::{self, Write}, process};
-use std::env::home_dir;
-use sha2::{Sha256, Digest};
+use homedir;
 
 mod err;
 mod models;
@@ -15,46 +14,48 @@ fn main() {
 }
 
 fn run() -> Result<(), AppError> {
-
+    //
     // Path: ~/.pm/vault.json
-    let mut path = PathBuf::from(home_dir().unwrap());
+    //
+    let mut path = homedir::my_home().unwrap().ok_or(AppError::IOError(io::Error::new(
+        io::ErrorKind::NotFound,
+        "Could not determine home directory",
+    )))?;
     path.push(".pm");
     path.push("vault.json");
 
-    // Ask for the master password
-    print!("pm> enter your master password: ");
+    //
+    // Ask for the password
+    //
+    print!("pm> enter secret: ");
     io::stdout().flush().unwrap();
 
     let mut buffer = String::new();
     io::stdin().read_line(&mut buffer).map_err(AppError::IOError)?;
-    let pass = buffer.trim().to_string();
-    let hash = Sha256::digest(pass.as_bytes());
+    let secret = buffer.trim().to_string();
 
-    // If the keystore exists, password from user is
-    // going to be used to enter it
-
+    //
+    // If the keystore exists, open it
+    // Otherwise, create a new one
+    //
     let mut vault = if path.exists() {
-        let v = SecretStore::read(&path, pass)?;
+        let v = SecretStore::load(&path, &secret)?;
         println!("pm> hello!");
         v
     } else {
-
-        // If the keystore does not exist, password from
-        // user is going to be uses to setup master 
-        // password, which is the only secret the user 
-        // is supposed to know
-
         println!("pm> no vault found, creating a new one...");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(AppError::IOError)?;
         }
-        let v = SecretStore::new(hash.into());
-        v.write(&path)?;
+        let mut v = SecretStore::new();
+        v.save(&path, &secret)?;   // <-- creates an empty encrypted vault
         v
     };
 
+    //
+    // Command loop
+    //
     loop {
-        // Await for a command
         print!("pm> ");
         io::stdout().flush().unwrap();
 
@@ -72,45 +73,40 @@ fn run() -> Result<(), AppError> {
                 let name = parts.next();
                 let pass = parts.next();
                 match (name, pass) {
-                    (Some(s), Some(p)) => {
-                        vault.insert(s.to_string(), p.to_string()).write(&path)?;
-                        println!("pm> added entry for {}", s);
+                    (Some(name), Some(password)) => {
+                        vault.add_entry(name.to_string(), password.to_string());
+                        println!("pm> added entry for {}", name);
                     }
-                    _ => {
-                        println!("pm> usage: add <name> <pass>")
-                    }
+                    _ => println!("pm> usage: add <name> <pass>"),
                 }
             }
             Some("get") => {
                 if let Some(s) = parts.next() {
-                    match vault.search(s) {
-                        Some(entry) => {
-                            println!("pm> name={}, pass={}", entry.name, entry.pass)
-                        }
-                        None => {
-                            println!("pm> empty")
-                        }
+                    match vault.get_entry(s) {
+                        Some(entry) => println!("pm> name={}, pass={}", entry.name, entry.password),
+                        None => println!("pm> empty"),
                     }
                 } else {
                     println!("pm> usage: get <name>");
                 }
             }
             Some("list") => {
-                let tot = vault.vals.iter().count();
-                if tot == 0 {
-                    println!("pm> empty")
-                    
+                let entries = vault.get_all();
+                if entries.is_empty() {
+                    println!("pm> empty");
                 } else {
-                    vault.vals.iter().for_each(|entry| {
-                        println!("name={}, pass={}", entry.name, entry.pass);
-                    });
+                    for entry in entries {
+                        println!("name={}, pass={}", entry.name, entry.password);
+                    }
                 }
             }
             Some("exit") | Some("quit") => {
+                vault.save(&path, &secret)?;
                 println!("pm> goodbye!");
                 break;
             }
             Some(cmd) => {
+                vault.save(&path, &secret)?;
                 println!("pm> {} is not a command", cmd);
                 print_help();
             }
@@ -125,8 +121,8 @@ fn run() -> Result<(), AppError> {
 
 fn print_help() {
     println!("pm> available commands:");
-    println!("      add <name> <pass>   - add a new entry (e.g., ''add github.com hellofans'')");
-    println!("      get <name>          - retrieve a password (e.g., ''get github.com'')");
-    println!("      list                - list all entries");
+    println!("      add <name> <pass>   - add a new entry (e.g., 'add github.com mypassword')");
+    println!("      get <name>          - retrieve a password (e.g., 'get github.com')");
+    println!("      list                - list all entries (decrypted)");
     println!("      exit | quit         - exit the program");
 }
