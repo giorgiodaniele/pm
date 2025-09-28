@@ -7,6 +7,9 @@ use err::AppError;
 use models::vault::SecretStore;
 
 fn main() {
+    // Print a nice header once at startup
+    print_header();
+
     if let Err(e) = run() {
         eprintln!("pm> {}", e);
         process::exit(1);
@@ -125,4 +128,19 @@ fn print_help() {
     println!("      get <name>          - retrieve a password (e.g., 'get github.com')");
     println!("      list                - list all entries (decrypted)");
     println!("      exit | quit         - exit the program");
+}
+
+fn print_header() {
+    // Separator line
+    println!("\n{}", "=".repeat(40));
+
+    // Centered subtitle
+    let title = "Simple Password Manager (pm)";
+    let width = 40;
+    let padding = (width - title.len()) / 2;
+    println!("{}{}", " ".repeat(padding), title);
+
+    // Closing separator
+    println!("{}", "=".repeat(40));
+    println!();
 }
