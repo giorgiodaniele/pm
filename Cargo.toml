@@ -15,3 +15,5 @@ pbkdf2     = { version = "0.12", features = ["simple"] }
 hmac       = "0.12"
 sha2       = "0.10"
 aes-gcm    = "0.10"
+thiserror = "2.0.17"
+rpassword = "7.4.0"

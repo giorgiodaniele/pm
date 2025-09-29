@@ -1,3 +1,6 @@
+use core::time;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde::{Deserialize, Serialize};
 
 //
@@ -6,14 +9,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Entry {
     pub name: String,
-    pub password: String,
+    pub pass: String,
+    pub desc: String,
+    pub when: u128,
 }
 
 impl Entry {
-    //
-    // Create a new entry (just plaintext inside memory)
-    //
-    pub fn new(name: String, password: String) -> Entry {
-        Entry { name, password }
+
+    pub fn new(name: String, pass: String, desc: String) -> Entry {
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+        Entry { name, pass, desc, when: timestamp }
     }
 }

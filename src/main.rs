@@ -1,10 +1,14 @@
-use std::{fs, path::PathBuf, io::{self, Write}, process};
-use homedir;
+use std::{
+    env::home_dir, fs, io::{self, Write}, path::PathBuf, process
+};
+
+use rpassword;
 
 mod err;
 mod models;
+
 use err::AppError;
-use models::vault::SecretStore;
+use models::vault::Vault;
 
 fn main() {
     // Print a nice header once at startup
@@ -12,7 +16,6 @@ fn main() {
 
     if let Err(e) = run() {
         eprintln!("pm> {}", e);
-        process::exit(1);
     }
 }
 
@@ -20,29 +23,27 @@ fn run() -> Result<(), AppError> {
     //
     // Path: ~/.pm/vault.json
     //
-    let mut path = homedir::my_home().unwrap().ok_or(AppError::IOError(io::Error::new(
-        io::ErrorKind::NotFound,
-        "Could not determine home directory",
-    )))?;
+    let mut path = home_dir().ok_or_else(|| {
+        AppError::IOError(std::io::Error::new(
+            io::ErrorKind::NotFound,
+            "Home directory not found",
+        ))
+    })?;
     path.push(".pm");
     path.push("vault.json");
 
     //
-    // Ask for the password
+    // Ask for the password (hidden input)
     //
-    print!("pm> enter secret: ");
-    io::stdout().flush().unwrap();
-
-    let mut buffer = String::new();
-    io::stdin().read_line(&mut buffer).map_err(AppError::IOError)?;
-    let secret = buffer.trim().to_string();
+    let secret = rpassword::prompt_password("pm> enter secret: ")
+        .map_err(AppError::IOError)?;
 
     //
     // If the keystore exists, open it
     // Otherwise, create a new one
     //
     let mut vault = if path.exists() {
-        let v = SecretStore::load(&path, &secret)?;
+        let v = Vault::load(&path, &secret)?;
         println!("pm> hello!");
         v
     } else {
@@ -50,14 +51,15 @@ fn run() -> Result<(), AppError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(AppError::IOError)?;
         }
-        let mut v = SecretStore::new();
-        v.save(&path, &secret)?;   // <-- creates an empty encrypted vault
+        let mut v = Vault::new();
+        v.save(&path, &secret)?;
         v
     };
 
     //
     // Command loop
     //
+    let mut buffer = String::new();
     loop {
         print!("pm> ");
         io::stdout().flush().unwrap();
@@ -67,27 +69,42 @@ fn run() -> Result<(), AppError> {
             continue;
         }
 
-        let input = buffer.trim();
-        let mut parts = input.split_whitespace();
-        let cmd = parts.next();
-
-        match cmd {
+        let mut parts = buffer.trim().split_whitespace();
+        match parts.next() {
             Some("add") => {
                 let name = parts.next();
                 let pass = parts.next();
-                match (name, pass) {
-                    (Some(name), Some(password)) => {
-                        vault.add_entry(name.to_string(), password.to_string());
+
+                // Description may be a sequence of strings
+                // each separated by a space. So, description
+                // should be taken until it reaches the ENTER
+                // key.
+                let mut desc = String::new();
+                while let Some(s) = parts.next() {
+                    desc.push_str(s);
+                    desc.push(' ');
+                };
+
+                match (name, pass, desc) {
+                    (Some(name), Some(pass), desc) => {
+                        vault.add_entry(
+                            name.to_string(),
+                            pass.to_string(),
+                            desc.to_string(),
+                        );
+                        vault.save(&path, &secret)?;
                         println!("pm> added entry for {}", name);
                     }
-                    _ => println!("pm> usage: add <name> <pass>"),
+                    _ => println!("pm> usage: add <name> <pass> [desc]"),
                 }
             }
             Some("get") => {
                 if let Some(s) = parts.next() {
                     match vault.get_entry(s) {
-                        Some(entry) => println!("pm> name={}, pass={}", entry.name, entry.password),
-                        None => println!("pm> empty"),
+                        Some(entry) => {
+                            println!("pm> name={}, pass={} desc={}", entry.name, entry.pass, entry.desc)
+                        }
+                        None => println!("pm> no entry found"),
                     }
                 } else {
                     println!("pm> usage: get <name>");
@@ -99,7 +116,7 @@ fn run() -> Result<(), AppError> {
                     println!("pm> empty");
                 } else {
                     for entry in entries {
-                        println!("name={}, pass={}", entry.name, entry.password);
+                        println!("pm> name={}, pass={} desc={}", entry.name, entry.pass, entry.desc)
                     }
                 }
             }
@@ -108,8 +125,10 @@ fn run() -> Result<(), AppError> {
                 println!("pm> goodbye!");
                 break;
             }
+            Some("help") => {
+                print_help();
+            }
             Some(cmd) => {
-                vault.save(&path, &secret)?;
                 println!("pm> {} is not a command", cmd);
                 print_help();
             }
@@ -124,23 +143,36 @@ fn run() -> Result<(), AppError> {
 
 fn print_help() {
     println!("pm> available commands:");
-    println!("      add <name> <pass>   - add a new entry (e.g., 'add github.com mypassword')");
-    println!("      get <name>          - retrieve a password (e.g., 'get github.com')");
-    println!("      list                - list all entries (decrypted)");
-    println!("      exit | quit         - exit the program");
+    println!("      add <name> <pass> [desc]   - add a new entry (e.g., 'add github.com mypassword')");
+    println!("      get <name>                 - retrieve a password (e.g., 'get github.com')");
+    println!("      list                       - list all entries (decrypted)");
+    println!("      exit | quit                - exit the program");
 }
 
 fn print_header() {
+
+    let n = 110;
+
     // Separator line
-    println!("\n{}", "=".repeat(40));
+    println!("{}", "=".repeat(n));
 
     // Centered subtitle
-    let title = "Simple Password Manager (pm)";
-    let width = 40;
+    let title = "Password Manager (pm)";
+    let width = n;
     let padding = (width - title.len()) / 2;
     println!("{}{}", " ".repeat(padding), title);
 
+    println!("{}", "=".repeat(n));
+
+    println!("add <name> <pass> [desc]   - add a new entry (e.g., 'add github.com mypassword')");
+    println!("get <name>                 - retrieve a password (e.g., 'get github.com')");
+    println!("list                       - list all entries (decrypted)");
+    println!("help                       - list available commands");
+    println!("exit | quit                - exit the program");
+
     // Closing separator
-    println!("{}", "=".repeat(40));
-    println!();
+    println!("{}", "=".repeat(n));
+
+    // One clean line with instructions
+    // println!("Type 'help' for available commands");
 }
