@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, fs, io::Write, path::PathBuf};
+use std::{collections::HashMap, fmt, fs::{self, OpenOptions}, io::Write, path::PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
@@ -55,8 +55,11 @@ impl Store {
     pub fn save(&self) {
 
         // Open the JSON file for writing
-        let mut file = fs::File::open(&self.file)
-            .expect("file should open read only");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&self.file)
+            .expect("unable to open file");
 
         // Convert map into a vec
         let data: Vec<&Secret> = self.data.values().collect();

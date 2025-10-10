@@ -2,12 +2,14 @@ use std::io::{self, Write};
 use crate::model::store::Store;
 
 mod model;
+mod constant;
 
-const GET_CMD: &str = "get";
-const DEL_CMD: &str = "del";
-const SET_CMD: &str = "set";
-const ALL_CMD: &str = "all";
-const EXT_CMD: &str = "exit";
+const GET_CMD  : &str = "get";
+const DEL_CMD  : &str = "del";
+const SET_CMD  : &str = "set";
+const ALL_CMD  : &str = "all";
+const EXT_CMD  : &str = "exit";
+const HELP_CMD : &str = "help";
 
 fn main() {
     let home = homedir::my_home()
@@ -15,8 +17,10 @@ fn main() {
         .unwrap();
 
     let fold = home.join(".pm");
-    let file = fold.join(".secrets.json");
+    let file = fold.join("secrets.json");
     let mut store = Store::open(file);
+
+    println!("{}", constant::HEADER);
 
     loop {
         print!("> ");
@@ -38,12 +42,16 @@ fn main() {
         let args = &pts[1..];
 
         match cmd.as_str() {
-            SET_CMD => handle_set(&mut store, args),
-            GET_CMD => handle_get(&store, args),
-            ALL_CMD => handle_all(&store),
-            DEL_CMD => handle_del(&mut store, args),
-            EXT_CMD => break,
-            _ => println!("error: unknown command '{}'", cmd),
+            SET_CMD  => handle_set(&mut store, args),
+            GET_CMD  => handle_get(&store, args),
+            ALL_CMD  => handle_all(&store),
+            DEL_CMD  => handle_del(&mut store, args),
+            HELP_CMD => println!("{}", constant::HELPER),
+            EXT_CMD  => {
+                store.save();
+                break;
+            },
+            _ => println!("error: unknown command '{}', use command 'help' for more information", cmd),
         }
     }
 }
