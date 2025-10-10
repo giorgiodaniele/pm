@@ -5,27 +5,27 @@ use serde::{Deserialize, Serialize};
 pub struct Secret {
     hash: String,
     name: String,
-    user: String,
-    text: String,
+    username: String,
+    password: String,
 }
 
 impl Secret {
 
-    pub fn new(hash: String, name: String, user: String, text: String) -> Secret {
-        Secret { hash, name, text, user }
+    pub fn new(hash: String, name: String, username: String, password: String) -> Secret {
+        Secret { hash, name, password, username }
     }
 
-    pub fn get_user(&self) -> String { self.user.clone() }
     pub fn get_hash(&self) -> String { self.hash.clone() }
     pub fn get_name(&self) -> String { self.name.clone() }
-    pub fn get_text(&self) -> String { self.text.clone() }
 }
 
 impl fmt::Display for Secret {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "name={}, user={}, text={}", self.name, self.user,self.text
-        )
+            "name={}, username={}, password={}", 
+                self.name, 
+                self.username,
+                self.password)
     }
 }
