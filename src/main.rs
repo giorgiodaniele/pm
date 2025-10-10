@@ -17,7 +17,6 @@ fn main() {
     let file = fold.join("secrets.json");
     let mut store = Store::open(file);
 
-
     println!("{}", constant::HEADER);
 
     loop {
